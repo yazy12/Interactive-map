@@ -108,7 +108,6 @@ class ModernSchoolArchiveApp:
             "Oklahoma": "assets/School_Districts_Oklahoma copy.csv",
             "Kansas": "assets/School_Districts_Kansas.csv",
             "Pennsylvania": "assets/School_Districts_Pennsylvania.csv",
-            "New Mexico": "assets/School_Districts_New Mexico.csv",
             "New York State": "assets/School_Districts_New York.csv",
             "Maine": "assets/School_Districts_Maine.csv",
             "Vermont": "assets/School_Districts_Vermont.csv",
@@ -129,7 +128,6 @@ class ModernSchoolArchiveApp:
             "Arkansas": "assets/School_Districts_Arkansas.csv",
             "California": "assets/School_Districts_California.csv",
             "Hawaii": "assets/School_Districts_Hawaii.csv"
-
         }
 
         frames = []
@@ -158,6 +156,18 @@ class ModernSchoolArchiveApp:
         else:
             self.stats_data = pd.DataFrame()
             print("Warning: State EDU Stats.csv was not found in the current folder.")
+
+        # Load Report Cards Data
+        report_cards_file = "State Report Cards.csv"
+        if os.path.exists(report_cards_file):
+            self.report_cards_data = pd.read_csv(report_cards_file)
+            if "State" in self.report_cards_data.columns:
+                self.report_cards_data["State"] = self.report_cards_data["State"].str.strip()
+            # Clean up potential leading/trailing spaces in the column headers
+            self.report_cards_data.columns = self.report_cards_data.columns.str.strip()
+        else:
+            self.report_cards_data = pd.DataFrame()
+            print("Warning: State Report Cards.csv was not found in the current folder.")
 
     def create_widgets(self):
         # --- TOP HEADER BANNER ---
@@ -303,16 +313,17 @@ class ModernSchoolArchiveApp:
         )
         self.detail_label.pack(fill=tk.X, pady=(12, 4))
 
-        # Line 2: Comprehensive State Statistics Row
+        # Line 2: Comprehensive State Statistics Row (uses a fixed-width type font for structured table display)
         self.stats_var = tk.StringVar(value="State Educational Stats: Select a state to view comprehensive performance metrics.")
         self.stats_label = tk.Label(
             self.detail_card, textvariable=self.stats_var,
-            font=("Segoe UI", 10), fg="#475569", bg="#FFFFFF",
-            justify=tk.LEFT, anchor=tk.W, padx=15, pady=2
+            font=("Courier New", 10), fg="#334155", bg="#FFFFFF",
+            justify=tk.LEFT, anchor=tk.W, padx=15, pady=2,
+            wraplength=1220
         )
         self.stats_label.pack(fill=tk.X, pady=(4, 12))
 
-        # --- NEW: STATE EDUCATION NEWS FEED PANEL ---
+        # --- STATE EDUCATION NEWS FEED PANEL ---
         news_frame = ttk.LabelFrame(scrollable_frame, text="  4. LOCAL EDUCATION HEADLINES (Double-Click to Read)  ", padding=10)
         news_frame.pack(fill=tk.X, side=tk.TOP, padx=20, pady=(10, 30))
 
@@ -371,25 +382,60 @@ class ModernSchoolArchiveApp:
         self.map_widget.set_zoom(6)
 
     def update_state_stats(self, state_name):
+        stats_text = ""
+        
+        # 1. Base statistical metrics row from State EDU Stats.csv
         if hasattr(self, 'stats_data') and not self.stats_data.empty:
             state_row = self.stats_data[self.stats_data["State"] == state_name]
             if not state_row.empty:
                 row = state_row.iloc[0]
                 stats_text = (
-                    f"📊 State Metrics ({state_name}) — "
+                    f"📊 State Metrics ({state_name}) —\n"
                     f"Students: {row.get('Number of students', 'N/A')}  |  "
                     f"Grad Rate: {row.get('Graduation rate', 'N/A')}  |  "
                     f"Spending/Pupil: {row.get('Per-pupil spending', 'N/A')}  |  "
                     f"8th Math: {row.get('Average scale score (8th math)', 'N/A')}  |  "
                     f"4th Reading: {row.get('Average scale score (4th reading)', 'N/A')}  |  "
                     f"Avg SAT: {row.get('Average SAT score', 'N/A')}  |  "
-                    f"Avg ACT: {row.get('Average ACT score', 'N/A')}"
+                    f"Avg ACT: {row.get('Average ACT score', 'N/A')}\n\n"
                 )
-                self.stats_var.set(stats_text)
+        
+        # 2. Append report card grades structured as a clean text grid table from State Report Cards.csv
+        if hasattr(self, 'report_cards_data') and not self.report_cards_data.empty:
+            card_row = self.report_cards_data[self.report_cards_data["State"] == state_name]
+            if not card_row.empty:
+                rc = card_row.iloc[0]
+                
+                # Build an aligned structured table block
+                table_header = "┌─────────────────────────┬───────┐\n" \
+                               "│ Academic Category       │ Grade │\n" \
+                               "├─────────────────────────┼───────┤\n"
+                
+                math_row      = f"│ Math Performance        │   {rc.get('Math Grade', 'N/A')}   │\n"
+                english_row   = f"│ English/Language Arts   │   {rc.get('English Grade', 'N/A')}   │\n"
+                college_row   = f"│ College Readiness       │   {rc.get('College Readiness Grade', 'N/A')}   │\n"
+                parental_row  = f"│ Parental Rights Policy  │   {rc.get('Parental Rights', 'N/A')}   │\n"
+                table_footer  = "└─────────────────────────┴───────┘\n"
+                
+                report_table = table_header + math_row + english_row + college_row + parental_row + table_footer
+                report_card_text = (
+                    f"📝 State Performance Evaluation Report Card:\n"
+                    f"{report_table}"
+                    f"📋 Analysis Summary:\n{rc.get('Description', 'N/A')}"
+                )
+                if stats_text:
+                    stats_text += report_card_text
+                else:
+                    stats_text = f"📊 State Metrics ({state_name})\n\n{report_card_text}"
             else:
-                self.stats_var.set(f"📊 State Metrics ({state_name}) — No comparative statistical metrics found in data file.")
+                stats_text += "\n📝 Report Card — No performance grades found for this state in database records."
         else:
-            self.stats_var.set("📊 State Metrics — Educational statistics file is missing or unreadable.")
+            stats_text += "\n📝 Report Card — State Report Cards.csv is missing or could not be processed."
+
+        if not stats_text.strip():
+            stats_text = f"📊 State Metrics ({state_name}) — Missing statistical comparison vectors."
+
+        self.stats_var.set(stats_text)
 
     def on_state_select(self, event):
         selection = self.state_listbox.curselection()
