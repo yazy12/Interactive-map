@@ -469,7 +469,7 @@ class ModernSchoolArchiveApp:
         """Asynchronously requests real-time education items from Google News RSS."""
         try:
             # Query pulls news relevant to 'Education' and the current state name
-            query = f"Education {state_name}"
+            query = f"K-12 Education {state_name}"
             url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
             
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}

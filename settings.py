@@ -7,8 +7,8 @@ import tkintermapview
 from geopy.geocoders import Nominatim
 from PIL import Image, ImageTk
 import requests
-import xml.etree.ElementTree as ET  # <-- Added for RSS parsing
-import webbrowser                  # <-- Added to let users click and read full articles
+import xml.etree.ElementTree as ET  
+import webbrowser                  
 
 # Branding Hex Colors - Freedom in Education Theme
 COLOR_PRIMARY = "#0B2240"     # Deep Navy
