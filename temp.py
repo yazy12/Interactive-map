@@ -561,7 +561,7 @@ class ModernSchoolArchiveApp:
             if not row.empty:
                 city = row.iloc[0]["City"]
                 self.detail_var.set(
-                    f"🏫 District: {selected_district}   |   📍 City: {city}   |   🗺️ County: {selected_county}   |   🇺🇸 State: {selected_state}"
+                    f"🏫 District: {selected_district}   |   📍 City: {city}   |   🗺️ County: {selected_county}   |   State: {selected_state}"
                 )
 
                 search_query = f"{city}, {selected_state}, USA"
