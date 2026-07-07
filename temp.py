@@ -297,7 +297,7 @@ class ModernSchoolArchiveApp:
         self.map_widget.set_position(40.0, -84.5)
         self.map_widget.set_zoom(6)
 
-        # --- DETAIL CARD ROW ---
+        # --- COMBINED SUMMARY REPORT FRAME ---
         self.detail_card = tk.Frame(scrollable_frame, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
         self.detail_card.pack(fill=tk.X, side=tk.TOP, padx=20, pady=(10, 10))
 
@@ -462,7 +462,7 @@ class ModernSchoolArchiveApp:
         self.news_listbox.insert(tk.END, "  🔄 Fetching local education headlines...")
         threading.Thread(target=self.async_fetch_news, args=(selected_state,), daemon=True).start()
 
-        # Trigger background placeholder image fetch thread (Using your requested Lorem Flickr configuration)
+        # Trigger background Unsplash processing thread
         threading.Thread(target=self.async_fetch_state_image, args=(selected_state,), daemon=True).start()
 
         search_query = f"{selected_state}, USA"
@@ -473,30 +473,33 @@ class ModernSchoolArchiveApp:
             threading.Thread(target=self.async_fetch_boundary, args=(search_query, True, 7), daemon=True).start()
 
     def async_fetch_state_image(self, state_name):
-        """Asynchronously requests a targeted placeholder educational summary visual via Lorem Flickr streaming API."""
+        """Asynchronously requests a targeted education image via Unsplash search matching the selected state."""
         try:
-            # Fully utilizing your exact requested streaming configuration blueprint
-            img_url = f"https://loremflickr.com/500/250/{state_name},education,school/all"
-            img_response = requests.get(img_url, stream=True, timeout=5)
+            # Combining specific tags to isolate school/academic settings alongside state reference
+            query = f"{state_name} K-12 schools"
+            url = f"https://api.unsplash.com/search/photos?query={query}&per_page=1"
+            headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
             
-            if img_response.status_code == 200:
-                raw_data = img_response.raw
-                img = Image.open(raw_data)
-                
-                # Make sure the PIL operations stay perfectly synced on background worker thread
-                img.verify() # Ensure the streamed stream chunk is complete and untruncated
-                
-                # Re-open stream safely to perform mutation since verify() moves the read pointer
-                img_response = requests.get(img_url, stream=True, timeout=5)
-                img = Image.open(img_response.raw)
-                
-                # Deliver image handle securely via Tkinter loop callback hook mechanism
-                self.root.after(0, self.apply_image_update, img)
-                return
+            response = requests.get(url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("results"):
+                    img_url = data["results"][0]["urls"]["regular"]
+                    
+                    # Stream raw photo file bytes from Unsplash CDN
+                    img_response = requests.get(img_url, stream=True, timeout=5)
+                    if img_response.status_code == 200:
+                        img = Image.open(img_response.raw)
+                        
+                        # Cleanly crop/resize down to custom card proportions
+                        img.thumbnail((500, 250), Image.Resampling.LANCZOS)
+                        
+                        self.root.after(0, self.apply_image_update, img)
+                        return
                         
             self.root.after(0, self.apply_image_update, None)
         except Exception as e:
-            print(f"Failed to fetch state layout summary image via stream processing: {e}")
+            print(f"Failed to fetch state summary image from Unsplash API: {e}")
             self.root.after(0, self.apply_image_update, None)
 
     def apply_image_update(self, pil_image):
@@ -684,4 +687,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ModernSchoolArchiveApp(root)
     root.mainloop()
-

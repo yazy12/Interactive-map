@@ -17,3 +17,5 @@ COLOR_BG_LIGHT = "#F4F6F8"    # Soft Off-White
 COLOR_TEXT_DARK = "#1E293B"   # Charcoal Slate
 COLOR_LIST_BG = "#FFFFFF"     # Clean White Canvas
 COLOR_SELECT_BG = "#E2E8F0"   # Soft Gray Focus Highlight
+
+UNSPLASH_ACCESS_KEY = "C1EfwcEnIZxz9pNqnTbQG1TU21Aj9QGmxaTuT8s6YJw"
