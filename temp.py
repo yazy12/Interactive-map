@@ -5,7 +5,7 @@ class ModernSchoolArchiveApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Freedom in Education - School Districts Explorer")
-        self.root.geometry("1280x950")  # Bumped height slightly to gracefully host the news card
+        self.root.geometry("1280x950")  
         self.root.configure(bg=COLOR_BG_LIGHT)
 
         # Configure Universal Style Architecture
@@ -23,7 +23,8 @@ class ModernSchoolArchiveApp:
         # Track active map geometry elements to clear them on new selections
         self.current_marker = None
         self.current_polygon = None
-        self.news_urls = []  # <-- Tracks raw web links matching listbox indices
+        self.news_urls = []  
+        self.state_image = None  # Persistent reference to avoid Tkinter image garbage collection
 
         # Load data from CSVs
         self.load_data()
@@ -163,7 +164,6 @@ class ModernSchoolArchiveApp:
             self.report_cards_data = pd.read_csv(report_cards_file)
             if "State" in self.report_cards_data.columns:
                 self.report_cards_data["State"] = self.report_cards_data["State"].str.strip()
-            # Clean up potential leading/trailing spaces in the column headers
             self.report_cards_data.columns = self.report_cards_data.columns.str.strip()
         else:
             self.report_cards_data = pd.DataFrame()
@@ -297,7 +297,7 @@ class ModernSchoolArchiveApp:
         self.map_widget.set_position(40.0, -84.5)
         self.map_widget.set_zoom(6)
 
-        # --- DUAL ROW FOOTER ARCHITECTURE ---
+        # --- DETAIL CARD ROW ---
         self.detail_card = tk.Frame(scrollable_frame, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
         self.detail_card.pack(fill=tk.X, side=tk.TOP, padx=20, pady=(10, 10))
 
@@ -313,7 +313,7 @@ class ModernSchoolArchiveApp:
         )
         self.detail_label.pack(fill=tk.X, pady=(12, 4))
 
-        # Line 2: Comprehensive State Statistics Row (uses a fixed-width type font for structured table display)
+        # Line 2: Comprehensive State Statistics Row
         self.stats_var = tk.StringVar(value="State Educational Stats: Select a state to view comprehensive performance metrics.")
         self.stats_label = tk.Label(
             self.detail_card, textvariable=self.stats_var,
@@ -322,6 +322,10 @@ class ModernSchoolArchiveApp:
             wraplength=1220
         )
         self.stats_label.pack(fill=tk.X, pady=(4, 12))
+
+        # --- DYNAMIC ANALYSIS SUMMARY IMAGE FRAME ---
+        self.state_image_label = tk.Label(self.detail_card, bg="#FFFFFF")
+        self.state_image_label.pack(pady=(0, 15))
 
         # --- STATE EDUCATION NEWS FEED PANEL ---
         news_frame = ttk.LabelFrame(scrollable_frame, text="  4. LOCAL EDUCATION HEADLINES (Double-Click to Read)  ", padding=10)
@@ -345,7 +349,6 @@ class ModernSchoolArchiveApp:
         news_scroll.pack(fill=tk.Y, side=tk.RIGHT)
         self.news_listbox.config(yscrollcommand=news_scroll.set)
         
-        # Open matching URL when headline is double-clicked
         self.news_listbox.bind("<Double-Button-1>", self.open_headline_link)
 
         self.state_listbox.bind("<<ListboxSelect>>", self.on_state_select)
@@ -371,6 +374,10 @@ class ModernSchoolArchiveApp:
         self.detail_var.set("Select a state, county, and district to visualize administrative metrics.")
         self.stats_var.set("State Educational Stats: Select a state to view comprehensive performance metrics.")
         
+        # Reset Image Display Elements cleanly
+        self.state_image_label.config(image="")
+        self.state_image = None
+
         if self.current_marker:
             self.current_marker.delete()
             self.current_marker = None
@@ -384,7 +391,6 @@ class ModernSchoolArchiveApp:
     def update_state_stats(self, state_name):
         stats_text = ""
         
-        # 1. Base statistical metrics row from State EDU Stats.csv
         if hasattr(self, 'stats_data') and not self.stats_data.empty:
             state_row = self.stats_data[self.stats_data["State"] == state_name]
             if not state_row.empty:
@@ -400,13 +406,11 @@ class ModernSchoolArchiveApp:
                     f"Avg ACT: {row.get('Average ACT score', 'N/A')}\n\n"
                 )
         
-        # 2. Append report card grades structured as a clean text grid table from State Report Cards.csv
         if hasattr(self, 'report_cards_data') and not self.report_cards_data.empty:
             card_row = self.report_cards_data[self.report_cards_data["State"] == state_name]
             if not card_row.empty:
                 rc = card_row.iloc[0]
                 
-                # Build an aligned structured table block
                 table_header = "┌─────────────────────────┬───────┐\n" \
                                "│ Academic Category       │ Grade │\n" \
                                "├─────────────────────────┼───────┤\n"
@@ -453,10 +457,13 @@ class ModernSchoolArchiveApp:
 
         self.update_state_stats(selected_state)
         
-        # Trigger background news processing thread
+        # Trigger news thread
         self.news_listbox.delete(0, tk.END)
         self.news_listbox.insert(tk.END, "  🔄 Fetching local education headlines...")
         threading.Thread(target=self.async_fetch_news, args=(selected_state,), daemon=True).start()
+
+        # Trigger background placeholder image fetch thread (Using your requested Lorem Flickr configuration)
+        threading.Thread(target=self.async_fetch_state_image, args=(selected_state,), daemon=True).start()
 
         search_query = f"{selected_state}, USA"
         if search_query in self.boundary_cache:
@@ -465,10 +472,45 @@ class ModernSchoolArchiveApp:
         else:
             threading.Thread(target=self.async_fetch_boundary, args=(search_query, True, 7), daemon=True).start()
 
+    def async_fetch_state_image(self, state_name):
+        """Asynchronously requests a targeted placeholder educational summary visual via Lorem Flickr streaming API."""
+        try:
+            # Fully utilizing your exact requested streaming configuration blueprint
+            img_url = f"https://loremflickr.com/500/250/{state_name},education,school/all"
+            img_response = requests.get(img_url, stream=True, timeout=5)
+            
+            if img_response.status_code == 200:
+                raw_data = img_response.raw
+                img = Image.open(raw_data)
+                
+                # Make sure the PIL operations stay perfectly synced on background worker thread
+                img.verify() # Ensure the streamed stream chunk is complete and untruncated
+                
+                # Re-open stream safely to perform mutation since verify() moves the read pointer
+                img_response = requests.get(img_url, stream=True, timeout=5)
+                img = Image.open(img_response.raw)
+                
+                # Deliver image handle securely via Tkinter loop callback hook mechanism
+                self.root.after(0, self.apply_image_update, img)
+                return
+                        
+            self.root.after(0, self.apply_image_update, None)
+        except Exception as e:
+            print(f"Failed to fetch state layout summary image via stream processing: {e}")
+            self.root.after(0, self.apply_image_update, None)
+
+    def apply_image_update(self, pil_image):
+        """Applies the downloaded PIL image into the Tkinter label configuration."""
+        if pil_image:
+            self.state_image = ImageTk.PhotoImage(pil_image)
+            self.state_image_label.config(image=self.state_image)
+        else:
+            self.state_image_label.config(image="")
+            self.state_image = None
+
     def async_fetch_news(self, state_name):
         """Asynchronously requests real-time education items from Google News RSS."""
         try:
-            # Query pulls news relevant to 'Education' and the current state name
             query = f"K-12 Education {state_name}"
             url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
             
@@ -480,12 +522,10 @@ class ModernSchoolArchiveApp:
             
             if response.status_code == 200:
                 root_xml = ET.fromstring(response.content)
-                # Look up XML tree tags for standard channel RSS items
-                for item in root_xml.findall(".//item")[:15]:  # Capture top 15 breaking items
+                for item in root_xml.findall(".//item")[:15]:  
                     title = item.find("title").text
                     link = item.find("link").text
                     
-                    # Strip away excessive trailing publisher metadata from string headers if present
                     if " - " in title:
                         title = title.rsplit(" - ", 1)[0]
                         
@@ -644,3 +684,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = ModernSchoolArchiveApp(root)
     root.mainloop()
+
