@@ -1,21 +1,19 @@
 import os
-import threading
 import pandas as pd
-import tkinter as tk
-from tkinter import messagebox, ttk
-import tkintermapview
-from geopy.geocoders import Nominatim
-from PIL import Image, ImageTk
 import requests
-import xml.etree.ElementTree as ET  
-import webbrowser                  
+import streamlit as st
+from streamlit_folium import st_folium
+import folium
+import xml.etree.ElementTree as ET
 
-# Branding Hex Colors - Freedom in Education Theme
-COLOR_PRIMARY = "#0B2240"     # Deep Navy
-COLOR_SECONDARY = "#C8102E"   # Bright Crimson Accent
-COLOR_BG_LIGHT = "#F4F6F8"    # Soft Off-White
-COLOR_TEXT_DARK = "#1E293B"   # Charcoal Slate
-COLOR_LIST_BG = "#FFFFFF"     # Clean White Canvas
-COLOR_SELECT_BG = "#E2E8F0"   # Soft Gray Focus Highlight
+# Configure wide responsive page alignment matching full-width web frame
+st.set_page_config(layout="wide", page_title="Freedom in Education - School Districts Explorer")
+
+# --- FREEDOMINED.ORG BRAND COLOR PALETTE ARCHITECTURE ---
+COLOR_PRIMARY = "#0B2240"       # Official Deep Navy Hex Blue
+COLOR_ACCENT = "#B91C1C"        # Brand Red Core Accent
+COLOR_CARD_BG = "#F8FAFC"       # Light Slate Clean Background Canvas
+COLOR_BORDER = "#E2E8F0"        # Soft Gray Border Line Accent
+COLOR_TEXT_DARK = "#0F172A"     # Deep Onyx Body Text
 
 UNSPLASH_ACCESS_KEY = "C1EfwcEnIZxz9pNqnTbQG1TU21Aj9QGmxaTuT8s6YJw"

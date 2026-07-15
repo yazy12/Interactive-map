@@ -1,689 +1,378 @@
-from settings import *
+import os
+import pandas as pd
+import requests
+import streamlit as st
+from streamlit_folium import st_folium
+import folium
+import xml.etree.ElementTree as ET
 
-class ModernSchoolArchiveApp:
+# Configure wide responsive page alignment matching full-width web frame
+st.set_page_config(layout="wide", page_title="Freedom in Education - School Districts Explorer")
 
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Freedom in Education - School Districts Explorer")
-        self.root.geometry("1280x950")  
-        self.root.configure(bg=COLOR_BG_LIGHT)
+# --- FREEDOMINED.ORG BRAND COLOR PALETTE ARCHITECTURE ---
+COLOR_PRIMARY = "#0B2240"       # Official Deep Navy Hex Blue
+COLOR_ACCENT = "#B91C1C"        # Brand Red Core Accent
+COLOR_CARD_BG = "#F8FAFC"       # Light Slate Clean Background Canvas
+COLOR_BORDER = "#E2E8F0"        # Soft Gray Border Line Accent
+COLOR_TEXT_DARK = "#0F172A"     # Deep Onyx Body Text
 
-        # Configure Universal Style Architecture
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
-        self.configure_styles()
+# --- UNIVERSAL FREEDOM IN EDUCATION WEBSITE STYLE OVERRIDES ---
+st.markdown(f"""
+    <style>
+    /* Universal Font Stack Rule */
+    html, body, [data-testid="stWidgetLabel"], .stSelectbox, .stMarkdown, p, h1, h2, h3 {{
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif !important;
+        color: {COLOR_TEXT_DARK};
+    }}
+    
+    /* Modernized Corporate Content Row Card Frame */
+    .brand-board {{
+        background-color: #FFFFFF;
+        border: 1px solid {COLOR_BORDER};
+        padding: 24px;
+        border-radius: 6px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }}
+    
+    /* Segment Title Header matching freedomined.org */
+    .brand-header {{
+        text-align: left;
+        color: {COLOR_PRIMARY};
+        font-weight: 700;
+        font-size: 22px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid {COLOR_ACCENT};
+        padding-bottom: 8px;
+    }}
+    
+    /* Individual Modernized Flat Informational Metrics blocks */
+    .info-card-block {{
+        background-color: {COLOR_CARD_BG};
+        border-left: 4px solid {COLOR_PRIMARY};
+        border-top: 1px solid {COLOR_BORDER};
+        border-right: 1px solid {COLOR_BORDER};
+        border-bottom: 1px solid {COLOR_BORDER};
+        padding: 16px;
+        border-radius: 0px 4px 4px 0px;
+        color: {COLOR_TEXT_DARK};
+        min-height: 190px;
+    }}
+    
+    /* Primary Selection Horizontal Tracker String */
+    .brand-path-tracker {{
+        background-color: {COLOR_PRIMARY};
+        color: #FFFFFF !important;
+        padding: 12px 16px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }}
+    
+    .block-title {{
+        font-weight: 700;
+        color: {COLOR_PRIMARY};
+        margin-bottom: 10px;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }}
+    </style>
+""", unsafe_allow_html=True)
 
-        # Initialize geolocator for finding lat/lon of cities
-        self.geolocator = Nominatim(user_agent="freedom_in_education_explorer_v4")
+UNSPLASH_ACCESS_KEY = "C1EfwcEnIZxz9pNqnTbQG1TU21Aj9QGmxaTuT8s6YJw"
 
-        # --- LOCAL PERFORMANCE CACHE SYSTEM ---
-        self.boundary_cache = {}  
-        self.marker_cache = {}    
-
-        # Track active map geometry elements to clear them on new selections
-        self.current_marker = None
-        self.current_polygon = None
-        self.news_urls = []  
-        self.state_image = None  # Persistent reference to avoid Tkinter image garbage collection
-
-        # Load data from CSVs
-        self.load_data()
-
-        # Create Layout
-        self.create_widgets()
-
-    def configure_styles(self):
-        """Builds custom flattened layouts to eradicate 90s style beveling."""
-        self.style.configure(".", background=COLOR_BG_LIGHT, foreground=COLOR_TEXT_DARK)
-        
-        # Label Frames
-        self.style.configure(
-            "TLabelframe", 
-            background=COLOR_LIST_BG, 
-            relief="flat", 
-            borderwidth=1, 
-            bordercolor="#CBD5E1"
-        )
-        self.style.configure(
-            "TLabelframe.Label", 
-            font=("Segoe UI", 10, "bold"), 
-            foreground=COLOR_PRIMARY, 
-            background=COLOR_LIST_BG
-        )
-
-        # Scrollbars
-        self.style.configure(
-            "Vertical.TScrollbar", 
-            gripcount=0, 
-            background="#CBD5E1", 
-            troughcolor=COLOR_BG_LIGHT, 
-            borderwidth=0, 
-            arrowsize=12
-        )
-        
-        # Custom Button Style for Clear/Deselect action
-        self.style.configure(
-            "Clear.TButton",
-            font=("Segoe UI Semibold", 9),
-            background=COLOR_BG_LIGHT,
-            foreground=COLOR_TEXT_DARK,
-            borderwidth=1,
-            relief="flat",
-            padding=5
-        )
-        self.style.map(
-            "Clear.TButton",
-            background=[("active", COLOR_SELECT_BG), ("pressed", "#CBD5E1")],
-            foreground=[("active", COLOR_PRIMARY)]
-        )
-
-    def load_data(self):
-        files = {
-            "Indiana": "assets/School_Districts_Indiana.csv",
-            "Ohio": "assets/School_Districts_Ohio.csv",
-            "Illinois": "assets/School_Districts_Illinois.csv",
-            "Iowa": "assets/School_Districts_Iowa.csv",
-            "Wisconsin": "assets/School_Districts_Wisconsin.csv",
-            "Minnesota": "assets/School_Districts_Minnesota.csv",
-            "Michigan": "assets/School_Districts_Michigan.csv",
-            "Kentucky": "assets/School_Districts_Kentucky.csv",
-            "Georgia": "assets/School_Districts_Georgia.csv",
-            "Missouri": "assets/School_Districts_Missouri.csv",
-            "South Carolina": "assets/School_Districts_South Carolina.csv",
-            "North Carolina": "assets/School_Districts_North Carolina.csv",
-            "Mississippi": "assets/School_Districts_Mississippi.csv",
-            "Alabama": "assets/School_Districts_Alabamia.csv",
-            "North Dakota": "assets/School_Districts_North Dakota.csv",
-            "South Dakota": "assets/School_Districts_South Dakota.csv",
-            "Florida": "assets/School_Districts_Florida.csv",
-            "West Virginia": "assets/School_Districts_West Virginia.csv",
-            "Maryland": "assets/School_Districts_Maryland.csv",
-            "Virginia": "assets/School_Districts_Virginia.csv",
-            "Nebraska": "assets/School_Districts_Nebraska.csv",
-            "Louisiana": "assets/School_Districts_Louisiana.csv",
-            "Tennessee": "assets/School_Districts_Tennessee.csv",
-            "Texas": "assets/School_Districts_Texas.csv",
-            "New Mexico": "assets/School_Districts_New Mexico.csv",
-            "Delaware": "assets/School_Districts_Delaware.csv",
-            "New Jersey": "assets/School_Districts_New Jersey.csv",
-            "Oklahoma": "assets/School_Districts_Oklahoma copy.csv",
-            "Kansas": "assets/School_Districts_Kansas.csv",
-            "Pennsylvania": "assets/School_Districts_Pennsylvania.csv",
-            "New York State": "assets/School_Districts_New York.csv",
-            "Maine": "assets/School_Districts_Maine.csv",
-            "Vermont": "assets/School_Districts_Vermont.csv",
-            "New Hampshire": "assets/School_Districts_New Hampshire.csv",
-            "Massachusetts": "assets/School_Districts_Massachusetts.csv",
-            "Alaska": "assets/School_Districts_Alaska.csv",
-            "Rhode Island": "assets/School_Districts_Rhode Island.csv",
-            "Connecticut": "assets/School_Districts_Connecticut.csv",
-            "Arizona": "assets/School_Districts_Arizona.csv",
-            "Montana": "assets/School_Districts_Montana.csv",
-            "Nevada": "assets/School_Districts_Nevada.csv",
-            "Idaho": "assets/School_Districts_Idaho.csv",
-            "Oregon": "assets/School_Districts_Oregon.csv",
-            "Wyoming": "assets/School_Districts_Wyoming.csv",
-            "Washington State": "assets/School_Districts_Washington.csv",
-            "Utah": "assets/School_Districts_Utah.csv",
-            "Colorado": "assets/School_Districts_Colorado.csv",
-            "Arkansas": "assets/School_Districts_Arkansas.csv",
-            "California": "assets/School_Districts_California.csv",
-            "Hawaii": "assets/School_Districts_Hawaii.csv"
-        }
-
-        frames = []
-        for state, filename in files.items():
-            if os.path.exists(filename):
-                df = pd.read_csv(filename)
-                df["State"] = state
-                frames.append(df)
-            else:
-                print(f"Warning: {filename} was not found in the current folder.")
-
-        if frames:
-            self.data = pd.concat(frames, ignore_index=True)
-        else:
-            self.data = pd.DataFrame(columns=["School District", "City", "County", "State"])
-
-        for col in self.data.columns:
-            if self.data[col].dtype == "object":
-                self.data[col] = self.data[col].str.strip()
-
-        stats_file = "State EDU Stats.csv"
-        if os.path.exists(stats_file):
-            self.stats_data = pd.read_csv(stats_file)
-            if "State" in self.stats_data.columns:
-                self.stats_data["State"] = self.stats_data["State"].str.strip()
-        else:
-            self.stats_data = pd.DataFrame()
-            print("Warning: State EDU Stats.csv was not found in the current folder.")
-
-        # Load Report Cards Data
-        report_cards_file = "State Report Cards.csv"
-        if os.path.exists(report_cards_file):
-            self.report_cards_data = pd.read_csv(report_cards_file)
-            if "State" in self.report_cards_data.columns:
-                self.report_cards_data["State"] = self.report_cards_data["State"].str.strip()
-            self.report_cards_data.columns = self.report_cards_data.columns.str.strip()
-        else:
-            self.report_cards_data = pd.DataFrame()
-            print("Warning: State Report Cards.csv was not found in the current folder.")
-
-    def create_widgets(self):
-        # --- TOP HEADER BANNER ---
-        header_frame = tk.Frame(self.root, bg=COLOR_PRIMARY, height=130)
-        header_frame.pack(fill=tk.X, side=tk.TOP)
-        header_frame.pack_propagate(False)
-
-        center_container = tk.Frame(header_frame, bg=COLOR_PRIMARY)
-        center_container.pack(side=tk.LEFT, fill=tk.Y, padx=30)
-
-        logo_filename = "FIE_LOGO-WHITE-1.png"
-        if os.path.exists(logo_filename):
-            try:
-                raw_img = Image.open(logo_filename)
-                raw_img.thumbnail((110, 110), Image.Resampling.LANCZOS)
-                self.logo_img = ImageTk.PhotoImage(raw_img)
-                logo_label = tk.Label(center_container, image=self.logo_img, bg=COLOR_PRIMARY)
-                logo_label.pack(side=tk.LEFT, pady=10)
-            except Exception as e:
-                print(f"Could not render logo image file: {e}")
-        
-        subtitle_label = tk.Label(
-            center_container,
-            text="K-12 School Districts Archive & Explorer Map",
-            font=("Segoe UI Light", 25),
-            fg="#94A3B8",
-            bg=COLOR_PRIMARY
-        )
-        subtitle_label.pack(side=tk.LEFT, padx=(25, 0), pady=(10, 0))
-
-        # --- GLOBAL SCROLL ARCHITECTURE ---
-        scroll_container = tk.Frame(self.root, bg=COLOR_BG_LIGHT)
-        scroll_container.pack(fill=tk.BOTH, expand=True)
-
-        canvas = tk.Canvas(scroll_container, borderwidth=0, highlightthickness=0, bg=COLOR_BG_LIGHT)
-        v_scrollbar = ttk.Scrollbar(scroll_container, orient=tk.VERTICAL, command=canvas.yview)
-        canvas.configure(yscrollcommand=v_scrollbar.set)
-
-        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        scrollable_frame = tk.Frame(canvas, bg=COLOR_BG_LIGHT)
-        canvas_frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-
-        def _on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        scrollable_frame.bind("<Configure>", _on_frame_configure)
-
-        def _on_canvas_configure(event):
-            canvas.itemconfig(canvas_frame_id, width=event.width)
-        canvas.bind("<Configure>", _on_canvas_configure)
-
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
-        # --- MAIN WORKSPACE CONTAINER ---
-        main_content = ttk.Frame(scrollable_frame, padding=20, height=670)
-        main_content.pack(fill=tk.X, side=tk.TOP)
-        main_content.pack_propagate(False) 
-
-        master_pane = ttk.PanedWindow(main_content, orient=tk.HORIZONTAL)
-        master_pane.pack(fill=tk.BOTH, expand=True)
-
-        left_side_panel = ttk.Frame(master_pane)
-        control_strip = ttk.Frame(left_side_panel, padding=(0, 0, 0, 10))
-        control_strip.pack(fill=tk.X, side=tk.TOP)
-        
-        self.deselect_btn = ttk.Button(
-            control_strip, 
-            text="✕  Deselect All", 
-            style="Clear.TButton", 
-            command=self.clear_all_selections
-        )
-        self.deselect_btn.pack(side=tk.LEFT)
-
-        left_explorer_pane = ttk.PanedWindow(left_side_panel, orient=tk.HORIZONTAL)
-        left_explorer_pane.pack(fill=tk.BOTH, expand=True)
-
-        listbox_config = {
-            "font": ("Segoe UI", 10),
-            "bg": COLOR_LIST_BG,
-            "fg": COLOR_TEXT_DARK,
-            "selectbackground": COLOR_SELECT_BG,
-            "selectforeground": COLOR_PRIMARY,
-            "activestyle": "none",
-            "borderwidth": 0,
-            "highlightthickness": 0,
-            "exportselection": False
-        }
-
-        # State Listbox
-        state_frame = ttk.LabelFrame(left_explorer_pane, text="  1. SELECT STATE  ", padding=8)
-        self.state_listbox = tk.Listbox(state_frame, **listbox_config)
-        self.state_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        state_scroll = ttk.Scrollbar(state_frame, orient=tk.VERTICAL, command=self.state_listbox.yview)
-        state_scroll.pack(fill=tk.Y, side=tk.RIGHT)
-        self.state_listbox.config(yscrollcommand=state_scroll.set)
-        left_explorer_pane.add(state_frame, weight=1)
-
-        # County Listbox
-        county_frame = ttk.LabelFrame(left_explorer_pane, text="  2. SELECT COUNTY  ", padding=8)
-        self.county_listbox = tk.Listbox(county_frame, **listbox_config)
-        self.county_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        county_scroll = ttk.Scrollbar(county_frame, orient=tk.VERTICAL, command=self.county_listbox.yview)
-        county_scroll.pack(fill=tk.Y, side=tk.RIGHT)
-        self.county_listbox.config(yscrollcommand=county_scroll.set)
-        left_explorer_pane.add(county_frame, weight=1)
-
-        # District Listbox
-        district_frame = ttk.LabelFrame(left_explorer_pane, text="  3. SCHOOL DISTRICTS  ", padding=8)
-        self.district_listbox = tk.Listbox(district_frame, **listbox_config)
-        self.district_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        district_scroll = ttk.Scrollbar(district_frame, orient=tk.VERTICAL, command=self.district_listbox.yview)
-        district_scroll.pack(fill=tk.Y, side=tk.RIGHT)
-        self.district_listbox.config(yscrollcommand=district_scroll.set)
-        left_explorer_pane.add(district_frame, weight=2)
-
-        master_pane.add(left_side_panel, weight=4)
-
-        # MAP
-        map_container = ttk.LabelFrame(master_pane, text="  INTERACTIVE REGIONAL MAP  ", padding=2)
-        master_pane.add(map_container, weight=3)
-
-        self.map_widget = tkintermapview.TkinterMapView(map_container, corner_radius=6)
-        self.map_widget.pack(fill=tk.BOTH, expand=True)
-        self.map_widget.set_position(40.0, -84.5)
-        self.map_widget.set_zoom(6)
-
-        # --- COMBINED SUMMARY REPORT FRAME ---
-        self.detail_card = tk.Frame(scrollable_frame, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
-        self.detail_card.pack(fill=tk.X, side=tk.TOP, padx=20, pady=(10, 10))
-
-        accent_bar = tk.Frame(self.detail_card, bg=COLOR_SECONDARY, width=5)
-        accent_bar.pack(fill=tk.Y, side=tk.LEFT)
-
-        # Line 1: Hierarchical Selection Path
-        self.detail_var = tk.StringVar(value="Select a state, county, and district to visualize administrative metrics.")
-        self.detail_label = tk.Label(
-            self.detail_card, textvariable=self.detail_var,
-            font=("Segoe UI Semibold", 11), fg=COLOR_TEXT_DARK, bg="#FFFFFF",
-            justify=tk.LEFT, anchor=tk.W, padx=15, pady=2
-        )
-        self.detail_label.pack(fill=tk.X, pady=(12, 4))
-
-        # Line 2: Comprehensive State Statistics Row
-        self.stats_var = tk.StringVar(value="State Educational Stats: Select a state to view comprehensive performance metrics.")
-        self.stats_label = tk.Label(
-            self.detail_card, textvariable=self.stats_var,
-            font=("Courier New", 10), fg="#334155", bg="#FFFFFF",
-            justify=tk.LEFT, anchor=tk.W, padx=15, pady=2,
-            wraplength=1220
-        )
-        self.stats_label.pack(fill=tk.X, pady=(4, 12))
-
-        # --- DYNAMIC ANALYSIS SUMMARY IMAGE FRAME ---
-        self.state_image_label = tk.Label(self.detail_card, bg="#FFFFFF")
-        self.state_image_label.pack(pady=(0, 15))
-
-        # --- STATE EDUCATION NEWS FEED PANEL ---
-        news_frame = ttk.LabelFrame(scrollable_frame, text="  4. LOCAL EDUCATION HEADLINES (Double-Click to Read)  ", padding=10)
-        news_frame.pack(fill=tk.X, side=tk.TOP, padx=20, pady=(10, 30))
-
-        self.news_listbox = tk.Listbox(
-            news_frame, 
-            font=("Segoe UI", 10), 
-            bg=COLOR_LIST_BG, 
-            fg=COLOR_TEXT_DARK,
-            selectbackground=COLOR_SELECT_BG,
-            selectforeground=COLOR_PRIMARY,
-            height=6, 
-            borderwidth=0, 
-            highlightthickness=0, 
-            activestyle="none"
-        )
-        self.news_listbox.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
-        
-        news_scroll = ttk.Scrollbar(news_frame, orient=tk.VERTICAL, command=self.news_listbox.yview)
-        news_scroll.pack(fill=tk.Y, side=tk.RIGHT)
-        self.news_listbox.config(yscrollcommand=news_scroll.set)
-        
-        self.news_listbox.bind("<Double-Button-1>", self.open_headline_link)
-
-        self.state_listbox.bind("<<ListboxSelect>>", self.on_state_select)
-        self.county_listbox.bind("<<ListboxSelect>>", self.on_county_select)
-        self.district_listbox.bind("<<ListboxSelect>>", self.on_district_select)
-
-        self.populate_states()
-
-    def populate_states(self):
-        self.state_listbox.delete(0, tk.END)
-        if not self.data.empty:
-            for state in sorted(self.data["State"].unique()):
-                self.state_listbox.insert(tk.END, f"  {state}")
-        else:
-            messagebox.showerror("Error", "Could not map database records. Verify CSV paths.")
-
-    def clear_all_selections(self):
-        self.state_listbox.selection_clear(0, tk.END)
-        self.county_listbox.delete(0, tk.END)
-        self.district_listbox.delete(0, tk.END)
-        self.news_listbox.delete(0, tk.END)
-        self.news_urls = []
-        self.detail_var.set("Select a state, county, and district to visualize administrative metrics.")
-        self.stats_var.set("State Educational Stats: Select a state to view comprehensive performance metrics.")
-        
-        # Reset Image Display Elements cleanly
-        self.state_image_label.config(image="")
-        self.state_image = None
-
-        if self.current_marker:
-            self.current_marker.delete()
-            self.current_marker = None
-        if self.current_polygon:
-            self.current_polygon.delete()
-            self.current_polygon = None
+# --- CACHED DATA INGESTION ENGINE ---
+@st.cache_data
+def load_all_school_data():
+    files = {
+        "Indiana": "assets/School_Districts_Indiana.csv",
+        "Ohio": "assets/School_Districts_Ohio.csv",
+        "Illinois": "assets/School_Districts_Illinois.csv",
+        "Iowa": "assets/School_Districts_Iowa.csv",
+        "Wisconsin": "assets/School_Districts_Wisconsin.csv",
+        "Minnesota": "assets/School_Districts_Minnesota.csv",
+        "Michigan": "assets/School_Districts_Michigan.csv",
+        "Kentucky": "assets/School_Districts_Kentucky.csv",
+        "Georgia": "assets/School_Districts_Georgia.csv",
+        "Missouri": "assets/School_Districts_Missouri.csv",
+        "South Carolina": "assets/School_Districts_South Carolina.csv",
+        "North Carolina": "assets/School_Districts_North Carolina.csv",
+        "Mississippi": "assets/School_Districts_Mississippi.csv",
+        "Alabama": "assets/School_Districts_Alabamia.csv",
+        "North Dakota": "assets/School_Districts_North Dakota.csv",
+        "South Dakota": "assets/School_Districts_South Dakota.csv",
+        "Florida": "assets/School_Districts_Florida.csv",
+        "West Virginia": "assets/School_Districts_West Virginia.csv",
+        "Maryland": "assets/School_Districts_Maryland.csv",
+        "Virginia": "assets/School_Districts_Virginia.csv",
+        "Nebraska": "assets/School_Districts_Nebraska.csv",
+        "Louisiana": "assets/School_Districts_Louisiana.csv",
+        "Tennessee": "assets/School_Districts_Tennessee.csv",
+        "Texas": "assets/School_Districts_Texas.csv",
+        "New Mexico": "assets/School_Districts_New Mexico.csv",
+        "Delaware": "assets/School_Districts_Delaware.csv",
+        "New Jersey": "assets/School_Districts_New Jersey.csv",
+        "Oklahoma": "assets/School_Districts_Oklahoma copy.csv",
+        "Kansas": "assets/School_Districts_Kansas.csv",
+        "Pennsylvania": "assets/School_Districts_Pennsylvania.csv",
+        "New York State": "assets/School_Districts_New York.csv",
+        "Maine": "assets/School_Districts_Maine.csv",
+        "Vermont": "assets/School_Districts_Vermont.csv",
+        "New Hampshire": "assets/School_Districts_New Hampshire.csv",
+        "Massachusetts": "assets/School_Districts_Massachusetts.csv",
+        "Alaska": "assets/School_Districts_Alaska.csv",
+        "Rhode Island": "assets/School_Districts_Rhode Island.csv",
+        "Connecticut": "assets/School_Districts_Connecticut.csv",
+        "Arizona": "assets/School_Districts_Arizona.csv",
+        "Montana": "assets/School_Districts_Montana.csv",
+        "Nevada": "assets/School_Districts_Nevada.csv",
+        "Idaho": "assets/School_Districts_Idaho.csv",
+        "Oregon": "assets/School_Districts_Oregon.csv",
+        "Wyoming": "assets/School_Districts_Wyoming.csv",
+        "Washington State": "assets/School_Districts_Washington.csv",
+        "Utah": "assets/School_Districts_Utah.csv",
+        "Colorado": "assets/School_Districts_Colorado.csv",
+        "Arkansas": "assets/School_Districts_Arkansas.csv",
+        "California": "assets/School_Districts_California.csv",
+        "Hawaii": "assets/School_Districts_Hawaii.csv"
+    }
+    
+    frames = []
+    for state, filename in files.items():
+        if os.path.exists(filename):
+            df = pd.read_csv(filename)
+            df["State"] = state
+            frames.append(df)
             
-        self.map_widget.set_position(40.0, -84.5)
-        self.map_widget.set_zoom(6)
-
-    def update_state_stats(self, state_name):
-        stats_text = ""
+    if frames:
+        data = pd.concat(frames, ignore_index=True)
+    else:
+        data = pd.DataFrame(columns=["School District", "City", "County", "State"])
         
-        if hasattr(self, 'stats_data') and not self.stats_data.empty:
-            state_row = self.stats_data[self.stats_data["State"] == state_name]
-            if not state_row.empty:
-                row = state_row.iloc[0]
-                stats_text = (
-                    f"📊 State Metrics ({state_name}) —\n"
-                    f"Students: {row.get('Number of students', 'N/A')}  |  "
-                    f"Grad Rate: {row.get('Graduation rate', 'N/A')}  |  "
-                    f"Spending/Pupil: {row.get('Per-pupil spending', 'N/A')}  |  "
-                    f"8th Math: {row.get('Average scale score (8th math)', 'N/A')}  |  "
-                    f"4th Reading: {row.get('Average scale score (4th reading)', 'N/A')}  |  "
-                    f"Avg SAT: {row.get('Average SAT score', 'N/A')}  |  "
-                    f"Avg ACT: {row.get('Average ACT score', 'N/A')}\n\n"
-                )
+    for col in data.columns:
+        if data[col].dtype == "object":
+            data[col] = data[col].str.strip()
+            
+    stats_data = pd.read_csv("State EDU Stats.csv") if os.path.exists("State EDU Stats.csv") else pd.DataFrame()
+    if not stats_data.empty and "State" in stats_data.columns:
+        stats_data["State"] = stats_data["State"].str.strip()
         
-        if hasattr(self, 'report_cards_data') and not self.report_cards_data.empty:
-            card_row = self.report_cards_data[self.report_cards_data["State"] == state_name]
-            if not card_row.empty:
-                rc = card_row.iloc[0]
-                
-                table_header = "┌─────────────────────────┬───────┐\n" \
-                               "│ Academic Category       │ Grade │\n" \
-                               "├─────────────────────────┼───────┤\n"
-                
-                math_row      = f"│ Math Performance        │   {rc.get('Math Grade', 'N/A')}   │\n"
-                english_row   = f"│ English/Language Arts   │   {rc.get('English Grade', 'N/A')}   │\n"
-                college_row   = f"│ College Readiness       │   {rc.get('College Readiness Grade', 'N/A')}   │\n"
-                parental_row  = f"│ Parental Rights Policy  │   {rc.get('Parental Rights', 'N/A')}   │\n"
-                table_footer  = "└─────────────────────────┴───────┘\n"
-                
-                report_table = table_header + math_row + english_row + college_row + parental_row + table_footer
-                report_card_text = (
-                    f"📝 State Performance Evaluation Report Card:\n"
-                    f"{report_table}"
-                    f"📋 Analysis Summary:\n{rc.get('Description', 'N/A')}"
-                )
-                if stats_text:
-                    stats_text += report_card_text
-                else:
-                    stats_text = f"📊 State Metrics ({state_name})\n\n{report_card_text}"
-            else:
-                stats_text += "\n📝 Report Card — No performance grades found for this state in database records."
-        else:
-            stats_text += "\n📝 Report Card — State Report Cards.csv is missing or could not be processed."
-
-        if not stats_text.strip():
-            stats_text = f"📊 State Metrics ({state_name}) — Missing statistical comparison vectors."
-
-        self.stats_var.set(stats_text)
-
-    def on_state_select(self, event):
-        selection = self.state_listbox.curselection()
-        if not selection:
-            return
-
-        self.county_listbox.delete(0, tk.END)
-        self.district_listbox.delete(0, tk.END)
-        self.detail_var.set("Select a county and target school district.")
-
-        selected_state = self.state_listbox.get(selection[0]).strip()
-        counties = sorted(self.data[self.data["State"] == selected_state]["County"].unique())
-        for county in counties:
-            self.county_listbox.insert(tk.END, f"  {county}")
-
-        self.update_state_stats(selected_state)
+    report_cards_data = pd.read_csv("State Report Cards.csv") if os.path.exists("State Report Cards.csv") else pd.DataFrame()
+    if not report_cards_data.empty and "State" in report_cards_data.columns:
+        report_cards_data["State"] = report_cards_data["State"].str.strip()
+        report_cards_data.columns = report_cards_data.columns.str.strip()
         
-        # Trigger news thread
-        self.news_listbox.delete(0, tk.END)
-        self.news_listbox.insert(tk.END, "  🔄 Fetching local education headlines...")
-        threading.Thread(target=self.async_fetch_news, args=(selected_state,), daemon=True).start()
+    return data, stats_data, report_cards_data
 
-        # Trigger background Unsplash processing thread
-        threading.Thread(target=self.async_fetch_state_image, args=(selected_state,), daemon=True).start()
+@st.cache_data
+def fetch_news_headlines(state_name):
+    try:
+        query = f"K-12 Education {state_name}"
+        url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+        if response.status_code == 200:
+            root_xml = ET.fromstring(response.content)
+            items = []
+            for item in root_xml.findall(".//item")[:8]:
+                title = item.find("title").text
+                link = item.find("link").text
+                if " - " in title:
+                    title = title.rsplit(" - ", 1)[0]
+                items.append({"title": title, "link": link})
+            return items
+    except Exception:
+        pass
+    return [{"title": "No recent local education articles found.", "link": "#"}]
 
-        search_query = f"{selected_state}, USA"
-        if search_query in self.boundary_cache:
-            c = self.boundary_cache[search_query]
-            self.apply_combined_updates(c["lat"], c["lon"], 7, c["path"], COLOR_PRIMARY, 3)
-        else:
-            threading.Thread(target=self.async_fetch_boundary, args=(search_query, True, 7), daemon=True).start()
+@st.cache_data
+def fetch_unsplash_image(state_name):
+    try:
+        url = f"https://api.unsplash.com/search/photos?query={state_name} K-12 schools&per_page=1"
+        headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            results = response.json().get("results")
+            if results:
+                return results[0]["urls"]["regular"]
+    except Exception:
+        pass
+    return None
 
-    def async_fetch_state_image(self, state_name):
-        """Asynchronously requests a targeted education image via Unsplash search matching the selected state."""
-        try:
-            # Combining specific tags to isolate school/academic settings alongside state reference
-            query = f"{state_name} K-12 schools"
-            url = f"https://api.unsplash.com/search/photos?query={query}&per_page=1"
-            headers = {"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"}
-            
-            response = requests.get(url, headers=headers, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("results"):
-                    img_url = data["results"][0]["urls"]["regular"]
-                    
-                    # Stream raw photo file bytes from Unsplash CDN
-                    img_response = requests.get(img_url, stream=True, timeout=5)
-                    if img_response.status_code == 200:
-                        img = Image.open(img_response.raw)
-                        
-                        # Cleanly crop/resize down to custom card proportions
-                        img.thumbnail((500, 250), Image.Resampling.LANCZOS)
-                        
-                        self.root.after(0, self.apply_image_update, img)
-                        return
-                        
-            self.root.after(0, self.apply_image_update, None)
-        except Exception as e:
-            print(f"Failed to fetch state summary image from Unsplash API: {e}")
-            self.root.after(0, self.apply_image_update, None)
+@st.cache_data
+def fetch_boundary_data(query):
+    try:
+        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&polygon_geojson=1&limit=1"
+        headers = {"User-Agent": "freedom_in_education_explorer_web_v4"}
+        res = requests.get(url, headers=headers, timeout=5).json()
+        if res:
+            lat = float(res[0].get("lat"))
+            lon = float(res[0].get("lon"))
+            geojson = res[0].get("geojson", None)
+            return lat, lon, geojson
+    except Exception:
+        pass
+    return 40.0, -84.5, None
 
-    def apply_image_update(self, pil_image):
-        """Applies the downloaded PIL image into the Tkinter label configuration."""
-        if pil_image:
-            self.state_image = ImageTk.PhotoImage(pil_image)
-            self.state_image_label.config(image=self.state_image)
-        else:
-            self.state_image_label.config(image="")
-            self.state_image = None
+# --- EXECUTE INGESTION ---
+data, stats_data, report_cards_data = load_all_school_data()
 
-    def async_fetch_news(self, state_name):
-        """Asynchronously requests real-time education items from Google News RSS."""
-        try:
-            query = f"K-12 Education {state_name}"
-            url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
-            
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            response = requests.get(url, headers=headers, timeout=5)
-            
-            headlines = []
-            urls = []
-            
-            if response.status_code == 200:
-                root_xml = ET.fromstring(response.content)
-                for item in root_xml.findall(".//item")[:15]:  
-                    title = item.find("title").text
-                    link = item.find("link").text
-                    
-                    if " - " in title:
-                        title = title.rsplit(" - ", 1)[0]
-                        
-                    headlines.append(f"  📰  {title}")
-                    urls.append(link)
-                    
-            if not headlines:
-                headlines = ["  No recent local education articles found."]
-                urls = []
-                
-            self.root.after(0, self.apply_news_updates, headlines, urls)
-        except Exception as e:
-            print(f"News fetch system bypass exception: {e}")
-            self.root.after(0, self.apply_news_updates, ["  ⚠️ Network timeline sync failed. Could not fetch news updates."], [])
+# --- TOP HEADER BANNER ---
+log_col, title_col = st.columns([1, 6])
+with log_col:
+    logo_filename = "FIE_LOGO-WHITE-1.png"
+    if os.path.exists(logo_filename):
+        st.image(logo_filename, width=130)
+with title_col:
+    st.markdown(
+        f'<h1 style="color:{COLOR_PRIMARY}; margin:0; padding-top:12px; font-weight:700; font-size:34px;">Freedom in Education</h1>'
+        f'<p style="color:#64748B; margin:2px 0 0 0; font-size:16px; font-weight: 500;">Building Academic Excellence in America\'s Classrooms</p>',
+        unsafe_allow_html=True
+    )
 
-    def apply_news_updates(self, headlines, urls):
-        self.news_listbox.delete(0, tk.END)
-        self.news_urls = urls
-        for line in headlines:
-            self.news_listbox.insert(tk.END, line)
+st.write("---")
 
-    def open_headline_link(self, event):
-        selection = self.news_listbox.curselection()
-        if selection and self.news_urls:
-            idx = selection[0]
-            if idx < len(self.news_urls):
-                webbrowser.open(self.news_urls[idx])
+# --- WORKSPACE SIDE-BY-SIDE PANELS ---
+col_left, col_right = st.columns([4, 3])
 
-    def on_county_select(self, event):
-        state_sel = self.state_listbox.curselection()
-        county_sel = self.county_listbox.curselection()
-        if not state_sel or not county_sel:
-            return
+with col_left:
+    st.markdown(f'<div class="brand-header">School Districts Explorer Search</div>', unsafe_allow_html=True)
+    
+    # Select State Dropdown
+    state_list = sorted(data["State"].unique()) if not data.empty else []
+    selected_state = st.selectbox("1. SELECT STATE", ["-- Choose a State --"] + state_list)
+    
+    # Select County Dropdown
+    county_list = []
+    if selected_state != "-- Choose a State --":
+        county_list = sorted(data[data["State"] == selected_state]["County"].unique())
+    selected_county = st.selectbox("2. SELECT COUNTY", ["-- Choose a County --"] + county_list, disabled=(selected_state == "-- Choose a State --"))
+    
+    # Select District Dropdown
+    district_list = []
+    if selected_county != "-- Choose a County --":
+        district_list = sorted(data[(data["State"] == selected_state) & (data["County"] == selected_county)]["School District"].unique())
+    selected_district = st.selectbox("3. SCHOOL DISTRICTS", ["-- Choose a District --"] + district_list, disabled=(selected_county == "-- Choose a County --"))
 
-        self.district_listbox.delete(0, tk.END)
-        self.detail_var.set("Select a district to view mapped locations.")
+with col_right:
+    st.markdown(f'<div class="brand-header">Interactive Regional Map</div>', unsafe_allow_html=True)
+    
+    # Center Targets Map configurations
+    map_lat, map_lon = 40.0, -84.5
+    zoom_lvl = 5
+    geojson_layer = None
+    marker_label = None
+    outline_color = COLOR_PRIMARY
+    weight_thickness = 3
+    
+    if selected_district != "-- Choose a District --":
+        row = data[(data["State"] == selected_state) & (data["County"] == selected_county) & (data["School District"] == selected_district)]
+        if not row.empty:
+            city_name = row.iloc[0]["City"]
+            map_lat, map_lon, _ = fetch_boundary_data(f"{city_name}, {selected_state}, USA")
+            zoom_lvl = 11
+            marker_label = f"{selected_district} ({city_name})"
+    elif selected_county != "-- Choose a County --":
+        map_lat, map_lon, geojson_layer = fetch_boundary_data(f"{selected_county} County, {selected_state}, USA")
+        zoom_lvl = 9
+        outline_color = COLOR_ACCENT
+        weight_thickness = 2
+    elif selected_state != "-- Choose a State --":
+        map_lat, map_lon, geojson_layer = fetch_boundary_data(f"{selected_state}, USA")
+        zoom_lvl = 6
+        outline_color = COLOR_PRIMARY
+        weight_thickness = 3
 
-        selected_state = self.state_listbox.get(state_sel[0]).strip()
-        selected_county = self.county_listbox.get(county_sel[0]).strip()
-
-        districts = sorted(
-            self.data[
-                (self.data["State"] == selected_state) & 
-                (self.data["County"] == selected_county)
-            ]["School District"].unique()
-        )
-        for dist in districts:
-            self.district_listbox.insert(tk.END, f"  {dist}")
-
-        search_query = f"{selected_county} County, {selected_state}, USA"
+    m = folium.Map(location=[map_lat, map_lon], zoom_start=zoom_lvl, control_scale=True)
+    
+    # Dynamically project outline boundaries matching original feature set
+    if geojson_layer:
+        folium.GeoJson(
+            geojson_layer,
+            style_function=lambda x, color=outline_color, wt=weight_thickness: {
+                "fillColor": "transparent",
+                "color": color,
+                "weight": wt,
+                "fillOpacity": 0.0
+            }
+        ).add_to(m)
         
-        if search_query in self.boundary_cache:
-            c = self.boundary_cache[search_query]
-            self.apply_combined_updates(c["lat"], c["lon"], 9, c["path"], COLOR_SECONDARY, 2)
-        else:
-            threading.Thread(target=self.async_fetch_boundary, args=(search_query, False, 9), daemon=True).start()
+    if marker_label:
+        folium.Marker([map_lat, map_lon], popup=marker_label, tooltip=marker_label).add_to(m)
+        
+    st_folium(m, width="100%", height=320, key="folium_map")
 
-    def on_district_select(self, event):
-        state_sel = self.state_listbox.curselection()
-        county_sel = self.county_listbox.curselection()
-        district_sel = self.district_listbox.curselection()
+# --- CENTRAL ANALYSIS PANEL SYSTEM ---
+st.write("---")
 
-        if state_sel and county_sel and district_sel:
-            selected_state = self.state_listbox.get(state_sel[0]).strip()
-            selected_county = self.county_listbox.get(county_sel[0]).strip()
-            selected_district = self.district_listbox.get(district_sel[0]).strip()
+path_text = "Select a state, county, and district to visualize administrative metrics."
+grade_note = "No state selected yet."
+finance_note = "No state selected yet."
+testing_note = "No state selected yet."
+summary_note = "No state selected yet."
 
-            row = self.data[
-                (self.data["State"] == selected_state) & 
-                (self.data["County"] == selected_county) & 
-                (self.data["School District"] == selected_district)
-            ]
-            if not row.empty:
-                city = row.iloc[0]["City"]
-                self.detail_var.set(
-                    f"🏫 District: {selected_district}   |   📍 City: {city}   |   🗺️ County: {selected_county}   |   State: {selected_state}"
-                )
+if selected_state != "-- Choose a State --":
+    path_text = f"Selected Region: {selected_state}"
+    if selected_county != "-- Choose a County --":
+        path_text += f"   •   County: {selected_county}"
+    if selected_district != "-- Choose a District --":
+        row = data[(data["State"] == selected_state) & (data["County"] == selected_county) & (data["School District"] == selected_district)]
+        if not row.empty:
+            path_text = f"District: {selected_district}   •   City: {row.iloc[0]['City']}   •   County: {selected_county}   •   State: {selected_state}"
 
-                search_query = f"{city}, {selected_state}, USA"
-                marker_text = f"{selected_district}\n({city}, {selected_state})"
-                
-                if search_query in self.marker_cache:
-                    lat, lon = self.marker_cache[search_query]
-                    self.apply_map_updates(lat, lon, 11, marker_text)
-                else:
-                    threading.Thread(target=self.async_update_map, args=(search_query, 11, marker_text), daemon=True).start()
+    if not stats_data.empty:
+        st_row = stats_data[stats_data["State"] == selected_state]
+        if not st_row.empty:
+            r = st_row.iloc[0]
+            finance_note = f"• Students: {r.get('Number of students', 'N/A')}<br>• Spending/Pupil: {r.get('Per-pupil spending', 'N/A')}<br>• Grad Rate: {r.get('Graduation rate', 'N/A')}"
+            testing_note = f"• 8th Math Score: {r.get('Average scale score (8th math)', 'N/A')}<br>• 4th Reading Score: {r.get('Average scale score (4th reading)', 'N/A')}<br>• Avg SAT Score: {r.get('Average SAT score', 'N/A')}<br>• Avg ACT Score: {r.get('Average ACT score', 'N/A')}"
 
-    def async_fetch_boundary(self, query, is_state, target_zoom):
-        try:
-            url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&polygon_geojson=1&limit=1"
-            headers = {"User-Agent": "freedom_in_education_explorer_v4"}
-            response = requests.get(url, headers=headers, timeout=5)
-            
-            if response.status_code == 200 and response.json():
-                data = response.json()[0]
-                lat = float(data.get("lat"))
-                lon = float(data.get("lon"))
-                
-                geojson = data.get("geojson", {})
-                geom_type = geojson.get("type")
-                
-                coordinates = []
-                if geom_type == "Polygon":
-                    coordinates = geojson["coordinates"][0]
-                elif geom_type == "MultiPolygon":
-                    coordinates = geojson["coordinates"][0][0]
-                
-                polygon_path = [(coord[1], coord[0]) for coord in coordinates] if coordinates else None
-                self.boundary_cache[query] = {"lat": lat, "lon": lon, "path": polygon_path}
-                
-                color = COLOR_PRIMARY if is_state else COLOR_SECONDARY
-                border_width = 3 if is_state else 2
-                
-                self.root.after(0, self.apply_combined_updates, lat, lon, target_zoom, polygon_path, color, border_width)
-        except Exception as e:
-            print(f"Failed to fetch outline boundary: {e}")
+    if not report_cards_data.empty:
+        rc_row = report_cards_data[report_cards_data["State"] == selected_state]
+        if not rc_row.empty:
+            rc = rc_row.iloc[0]
+            grade_note = f"• Math Performance: {rc.get('Math Grade', 'N/A')}<br>• English / Lang: {rc.get('English Grade', 'N/A')}<br>• College Readiness: {rc.get('College Readiness Grade', 'N/A')}<br>• Parental Rights: {rc.get('Parental Rights', 'N/A')}"
+            summary_note = f"{rc.get('Description', 'N/A')}"
 
-    def async_update_map(self, query, zoom_level, marker_text=None):
-        try:
-            location = self.geolocator.geocode(query, timeout=5)
-            if location:
-                self.marker_cache[query] = (location.latitude, location.longitude)
-                self.root.after(0, self.apply_map_updates, location.latitude, location.longitude, zoom_level, marker_text)
-        except Exception as e:
-            print(f"Network Map Rendering Delay: {e}")
+# Render modern clean structure corresponding to Freedom in Education presentation parameters
+st.markdown(f"""
+    <div class="brand-board">
+        <div class="brand-header">District Analytics Dashboard</div>
+        <div class="brand-path-tracker">📍 {path_text}</div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 240px;" class="info-card-block">
+                <div class="block-title">Academic Grades</div>
+                <div style="font-size: 14px; line-height: 1.6;">{grade_note}</div>
+            </div>
+            <div style="flex: 1; min-width: 240px;" class="info-card-block">
+                <div class="block-title">Enrollment & Finance</div>
+                <div style="font-size: 14px; line-height: 1.6;">{finance_note}</div>
+            </div>
+            <div style="flex: 1; min-width: 240px;" class="info-card-block">
+                <div class="block-title">Testing Metrics</div>
+                <div style="font-size: 14px; line-height: 1.6;">{testing_note}</div>
+            </div>
+            <div style="flex: 1; min-width: 240px;" class="info-card-block">
+                <div class="block-title">Analysis Summary</div>
+                <div style="font-size: 14px; line-height: 1.5;">{summary_note}</div>
+            </div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
-    def apply_map_updates(self, lat, lon, zoom, marker_text):
-        self.map_widget.set_position(lat, lon)
-        self.map_widget.set_zoom(zoom)
+if selected_state != "-- Choose a State --":
+    img_url = fetch_unsplash_image(selected_state)
+    if img_url:
+        st.image(img_url, width=520, caption=f"Regional Snapshot Representation: {selected_state}")
 
-        if self.current_marker:
-            self.current_marker.delete()
-            self.current_marker = None
+# --- RSS TIMELINE NEWS TIMELINE ---
+st.write("---")
+st.markdown(f'<div class="brand-header">Local Education Headlines & Field Reports</div>', unsafe_allow_html=True)
 
-        if marker_text:
-            self.current_marker = self.map_widget.set_marker(lat, lon, text=marker_text)
-
-    def apply_combined_updates(self, lat, lon, zoom, path, color, border_width):
-        self.map_widget.set_position(lat, lon)
-        self.map_widget.set_zoom(zoom)
-
-        if self.current_polygon:
-            self.current_polygon.delete()
-            self.current_polygon = None
-            
-        if path:
-            self.current_polygon = self.map_widget.set_polygon(
-                position_list=path,
-                fill_color=None,
-                outline_color=color,
-                border_width=border_width
-            )
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = ModernSchoolArchiveApp(root)
-    root.mainloop()
+if selected_state != "-- Choose a State --":
+    headlines = fetch_news_headlines(selected_state)
+    for h in headlines:
+        st.markdown(f"📰 **[{h['title']}]({h['link']})**")
+else:
+    st.info("Select an active administrative state map filter above to pull recent education notifications.")
