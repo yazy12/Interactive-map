@@ -1,1 +1,1 @@
-Run streamlit run temp.py in terminal 
+Run "streamlit run temp.py" in terminal 
