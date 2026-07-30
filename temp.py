@@ -88,6 +88,12 @@ st.markdown(f"""
         text-transform: uppercase;
         letter-spacing: 0.6px;
     }}
+    .info-card-block .block-subtitle {{
+        font-weight: 600;
+        color: {COLOR_PRIMARY_LIGHT};
+        margin-bottom: 8px;
+        font-size: 12px;
+    }}
     .info-card-block .block-body {{
         font-size: 14px;
         line-height: 1.7;
@@ -233,6 +239,14 @@ def load_all_school_data():
 
 
 @st.cache_data
+def load_grades_methodology():
+    filename = "map_grades_methodology.csv"
+    if os.path.exists(filename):
+        return pd.read_csv(filename)
+    return pd.DataFrame()
+
+
+@st.cache_data
 def fetch_news_headlines(state_name):
     try:
         query = f"K-12 Education {state_name}"
@@ -284,6 +298,7 @@ def parse_numeric(val):
 # LOAD DATA
 # =====================================================================
 data, stats_data, report_cards_data = load_all_school_data()
+methodology_df = load_grades_methodology()
 
 # =====================================================================
 # HEADER
@@ -441,9 +456,10 @@ if selected_state != "-- Choose a State --":
             summary_note = f"{rc.get('Description', 'N/A')}"
 
 
-def render_card(title, body_html):
+def render_card(title, body_html, subtitle=None):
+    subtitle_html = f'<div class="block-subtitle">{subtitle}</div>' if subtitle else ""
     if body_html:
-        inner = f'<div class="block-body">{body_html}</div>'
+        inner = f'{subtitle_html}<div class="block-body">{body_html}</div>'
     else:
         inner = '<div class="block-empty">No data available for this selection yet.</div>'
     return (
@@ -470,9 +486,41 @@ with st.container(border=True):
         unsafe_allow_html=True,
     )
 
-    # --- ALL-STATES BAR GRAPH COMPARISON ---
-    show_graphs = st.toggle("📈 View All-States Comparative Charts", disabled=(selected_state == "-- Choose a State --"))
+    # --- DASHBOARD TOGGLES ---
+    toggle_col1, toggle_col2 = st.columns(2)
+    
+    with toggle_col1:
+        show_graphs = st.toggle("📈 View All-States Comparative Charts", disabled=(selected_state == "-- Choose a State --"))
+    
+    with toggle_col2:
+        show_methodology = st.toggle("📋 View Academic Grades Methodology")
 
+    # --- ACADEMIC GRADES METHODOLOGY PANEL ---
+    if show_methodology:
+        st.markdown("<hr style='margin: 16px 0 !important;'>", unsafe_allow_html=True)
+        st.subheader("📋 Academic Grades Methodology")
+        st.caption("How performance, readiness, and policy grades are standardized and evaluated across states.")
+
+        if not methodology_df.empty:
+            cards_html = []
+            cols = list(methodology_df.columns)
+            for col in cols:
+                sub_label = str(methodology_df[col].iloc[0]) if len(methodology_df) > 0 else ""
+                desc = str(methodology_df[col].iloc[1]) if len(methodology_df) > 1 else ""
+                cards_html.append(render_card(col, desc, subtitle=sub_label))
+
+            st.markdown(
+                f"""
+                <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;">
+                    {"".join(cards_html)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Methodology file `map_grades_methodology.csv` not found or empty.")
+
+    # --- ALL-STATES BAR GRAPH COMPARISON ---
     if show_graphs and not stats_data.empty:
         st.markdown("<hr style='margin: 16px 0 !important;'>", unsafe_allow_html=True)
         st.subheader("📊 State-by-State Educational Comparisons")
